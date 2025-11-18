@@ -1,0 +1,19 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom body styles */
+body {
+  @apply bg-gray-50 text-slate-900 font-sans antialiased;
+}
+
+/* Smooth scrolling for anchor links */
+* {
+  @apply scroll-smooth;
+}
+
+/* Buttons default style */
+button {
+  @apply font-medium rounded-lg px-4 py-2 transition-all duration-200;
+}
