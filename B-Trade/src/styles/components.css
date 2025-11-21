@@ -1,0 +1,13 @@
+/* Card styling */
+.card {
+  @apply bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow duration-300;
+}
+
+/* Hero section */
+.hero {
+  @apply relative h-96 bg-cover bg-center flex items-center justify-center text-white;
+}
+
+.hero-overlay {
+  @apply absolute inset-0 bg-black/50 flex items-center justify-center text-center;
+}

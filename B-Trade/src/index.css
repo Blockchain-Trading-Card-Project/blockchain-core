@@ -1,0 +1,195 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom body styles - Dark fintech theme */
+body {
+  @apply bg-slate-950 text-gray-100 font-sans antialiased;
+  background-image: 
+    radial-gradient(at 20% 80%, rgb(120, 119, 198) 0, transparent 50%),
+    radial-gradient(at 80% 20%, rgb(255, 119, 198) 0, transparent 50%),
+    radial-gradient(at 40% 40%, rgb(120, 219, 255) 0, transparent 50%);
+  background-attachment: fixed;
+  background-size: cover;
+  background-blend-mode: multiply;
+}
+
+/* Smooth scrolling for anchor links */
+* {
+  @apply scroll-smooth;
+}
+
+/* Glass morphism effect for cards */
+.glass-card {
+  @apply backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl shadow-2xl;
+}
+
+.glass-card-dark {
+  @apply backdrop-blur-xl bg-black/40 border border-white/10 rounded-2xl shadow-2xl;
+}
+
+/* Neon glow effects */
+.neon-glow {
+  @apply shadow-[0_0_20px_rgba(120,119,198,0.5)];
+}
+
+.neon-glow-pink {
+  @apply shadow-[0_0_20px_rgba(255,119,198,0.5)];
+}
+
+.neon-glow-cyan {
+  @apply shadow-[0_0_20px_rgba(120,219,255,0.5)];
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent;
+}
+
+.gradient-text-gold {
+  @apply bg-gradient-to-r from-yellow-200 via-yellow-400 to-yellow-600 bg-clip-text text-transparent;
+}
+
+/* Buttons - Fintech style */
+button {
+  @apply font-semibold rounded-lg px-6 py-3 transition-all duration-300 relative overflow-hidden;
+}
+
+.btn-primary {
+  @apply bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transform hover:scale-105 hover:shadow-[0_0_30px_rgba(168,85,247,0.5)];
+}
+
+.btn-secondary {
+  @apply bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 hover:border-white/40 transform hover:scale-105;
+}
+
+.btn-success {
+  @apply bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 transform hover:scale-105 hover:shadow-[0_0_30px_rgba(16,185,129,0.5)];
+}
+
+.btn-danger {
+  @apply bg-gradient-to-r from-red-500 to-pink-600 text-white hover:from-red-600 hover:to-pink-700 transform hover:scale-105 hover:shadow-[0_0_30px_rgba(239,68,68,0.5)];
+}
+
+/* Data cards for trading stats */
+.stat-card {
+  @apply glass-card p-6 hover:shadow-[0_0_40px_rgba(120,119,198,0.3)] transition-all duration-300 hover:border-purple-500/30;
+}
+
+/* Table styles for trading data */
+.trading-table {
+  @apply w-full backdrop-blur-md bg-black/20 rounded-xl overflow-hidden;
+}
+
+.trading-table thead {
+  @apply bg-white/5 border-b border-white/10;
+}
+
+.trading-table th {
+  @apply px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider;
+}
+
+.trading-table td {
+  @apply px-6 py-4 text-sm text-gray-200 border-b border-white/5;
+}
+
+.trading-table tr:hover {
+  @apply bg-white/5 transition-colors duration-200;
+}
+
+/* Chart container */
+.chart-container {
+  @apply glass-card-dark p-6 rounded-2xl;
+}
+
+/* Price displays */
+.price-up {
+  @apply text-emerald-400 font-bold;
+}
+
+.price-down {
+  @apply text-red-400 font-bold;
+}
+
+/* Badge styles */
+.badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.badge-success {
+  @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+}
+
+.badge-danger {
+  @apply bg-red-500/20 text-red-400 border border-red-500/30;
+}
+
+.badge-warning {
+  @apply bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+}
+
+.badge-info {
+  @apply bg-cyan-500/20 text-cyan-400 border border-cyan-500/30;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin h-5 w-5 border-2 border-purple-500 border-t-transparent rounded-full;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-900/50;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-purple-600/50 rounded-full hover:bg-purple-600/70;
+}
+
+/* Animation classes */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.5),
+                0 0 40px rgba(168, 85, 247, 0.3),
+                0 0 60px rgba(168, 85, 247, 0.1);
+  }
+  50% { 
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.8),
+                0 0 50px rgba(168, 85, 247, 0.5),
+                0 0 70px rgba(168, 85, 247, 0.3);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Input fields */
+input, select, textarea {
+  @apply bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 backdrop-blur-md;
+}
+
+/* Modal backdrop */
+.modal-backdrop {
+  @apply fixed inset-0 bg-black/80 backdrop-blur-sm z-40;
+}
+
+/* Modal content */
+.modal-content {
+  @apply fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 glass-card-dark p-8 max-w-lg w-full z-50;
+}
