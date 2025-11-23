@@ -62,11 +62,11 @@ const pickRarityByWeight = () => {
 };
 
 // ------------------- WALLET DROPS -------------------
-const generateWalletDrops = (walletAddress) => {
+const generateWalletDrops = (walletAddress, forceNew = false) => {
   const lastDropsDate = localStorage.getItem(`dropsDate_${walletAddress}`);
   const today = new Date().toDateString();
 
-  if (lastDropsDate === today) {
+  if (!forceNew && lastDropsDate === today) {
     const savedDrops = JSON.parse(localStorage.getItem(`drops_${walletAddress}`)) || [];
     return savedDrops.map(p => {
       if (!p.stats || !p.rarity) {
@@ -91,8 +91,16 @@ const generateWalletDrops = (walletAddress) => {
 };
 
 // ------------------- MINT TIMER -------------------
-const saveLastMintTime = (walletAddress) =>
-  localStorage.setItem(`lastMint_${walletAddress}`, Date.now());
+const saveLastMintTime = (walletAddress) => {
+  const today = new Date().toDateString();
+  localStorage.setItem(`lastMint_${walletAddress}`, today);
+};
+
+const canMintToday = (walletAddress) => {
+  const lastMintDate = localStorage.getItem(`lastMint_${walletAddress}`);
+  const today = new Date().toDateString();
+  return lastMintDate !== today;
+};
 
 // ------------------- COMPONENT -------------------
 export default function MintNFT() {
@@ -104,12 +112,32 @@ export default function MintNFT() {
   const [packOpened, setPackOpened] = useState(false);
   const [flippedCards, setFlippedCards] = useState([]);
   const [allCardsFlipped, setAllCardsFlipped] = useState(false);
+  const [canMint, setCanMint] = useState(true);
+
+  // Function to reset daily drops
+  const resetDailyDrops = () => {
+    if (walletAddress) {
+      localStorage.removeItem(`drops_${walletAddress}`);
+      localStorage.removeItem(`dropsDate_${walletAddress}`);
+      const drops = generateWalletDrops(walletAddress, true);
+      setPlayers(drops);
+      setFlippedCards(new Array(drops.length).fill(false));
+      setPackOpened(false);
+      setSelectedPlayer(null);
+      setAllCardsFlipped(false);
+      setMintResult(null);
+    }
+  };
 
   useEffect(() => {
     if (walletAddress) {
-      const drops = generateWalletDrops(walletAddress);
+      // Generate drops (will check date internally and reuse if same day)
+      const drops = generateWalletDrops(walletAddress, false);
       setPlayers(drops);
       setFlippedCards(new Array(drops.length).fill(false));
+      
+      // Check if user can mint today
+      setCanMint(canMintToday(walletAddress));
     }
   }, [walletAddress]);
 
@@ -145,6 +173,12 @@ export default function MintNFT() {
     if (!walletAddress) return alert("Connect your wallet first!");
     if (!selectedPlayer) return alert("Select a player first!");
     if (!window.ethereum) return alert("Install MetaMask!");
+    
+    // Check daily limit
+    if (!canMintToday(walletAddress)) {
+      alert("You've already minted today! Come back tomorrow for a new pack.");
+      return;
+    }
 
     setMinting(true);
     setMintResult(null);
@@ -170,23 +204,111 @@ export default function MintNFT() {
       const nftContract = new ethers.Contract(nftContractAddress, nftABI, signer);
       const costInWei = ethers.parseEther(raritySettings.find(r => r.name === selectedPlayer.rarity).cost.toString());
 
+      // Mint the NFT
+      console.log("Starting mint transaction...");
       const tx = await nftContract.mintNFT(walletAddress, metadataURI, { value: costInWei });
+      console.log("Transaction sent:", tx.hash);
+      
       const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt);
 
-      const marketplaceAddress = "0xe31D6Eee73235F203dEaFC8953f2F4553e71D3F0";
-      const marketplaceABI = ["function listItem(address nftAddress, uint256 tokenId, uint256 price) public"];
-      const marketplaceContract = new ethers.Contract(marketplaceAddress, marketplaceABI, signer);
+      // Extract tokenId from logs (ethers v6 compatible)
+      let tokenId;
+      try {
+        // Try to parse the Transfer event from the logs
+        const transferEvent = receipt.logs.find(log => {
+          try {
+            const parsedLog = nftContract.interface.parseLog({
+              topics: log.topics,
+              data: log.data
+            });
+            return parsedLog && parsedLog.name === 'Transfer';
+          } catch {
+            return false;
+          }
+        });
 
-      const tokenId = receipt.events[0].args[2];
-      await marketplaceContract.listItem(nftContractAddress, tokenId, costInWei);
+        if (transferEvent) {
+          const parsed = nftContract.interface.parseLog({
+            topics: transferEvent.topics,
+            data: transferEvent.data
+          });
+          tokenId = parsed.args.tokenId || parsed.args[2];
+          console.log("Extracted tokenId:", tokenId.toString());
+        } else {
+          throw new Error("Could not find Transfer event in receipt");
+        }
+      } catch (eventError) {
+        console.error("Error parsing events:", eventError);
+        // If we can't get the tokenId, we'll skip the marketplace listing
+        // but still consider the mint successful
+        console.log("Mint successful but skipping marketplace listing");
+        setMintResult({ 
+          success: true, 
+          hash: receipt.hash, 
+          blockNumber: receipt.blockNumber,
+          warning: "NFT minted successfully but automatic listing skipped"
+        });
+        saveLastMintTime(walletAddress);
+        setCanMint(false); // Update UI to reflect daily limit used
+        setMinting(false);
+        return;
+      }
 
-      setMintResult({ success: true, hash: receipt.transactionHash, blockNumber: receipt.blockNumber });
+      // List on marketplace if we successfully got the tokenId
+      try {
+        console.log("Listing on marketplace...");
+        const marketplaceAddress = "0xe31D6Eee73235F203dEaFC8953f2F4553e71D3F0";
+        const marketplaceABI = ["function listItem(address nftAddress, uint256 tokenId, uint256 price) public"];
+        const marketplaceContract = new ethers.Contract(marketplaceAddress, marketplaceABI, signer);
+
+        const listTx = await marketplaceContract.listItem(nftContractAddress, tokenId, costInWei);
+        await listTx.wait();
+        console.log("Listed on marketplace successfully");
+      } catch (listError) {
+        console.error("Marketplace listing error:", listError);
+        // Mint was successful even if listing failed
+        setMintResult({ 
+          success: true, 
+          hash: receipt.hash, 
+          blockNumber: receipt.blockNumber,
+          warning: "NFT minted successfully but marketplace listing failed"
+        });
+        saveLastMintTime(walletAddress);
+        setCanMint(false); // Update UI to reflect daily limit used
+        setMinting(false);
+        return;
+      }
+
+      // Complete success
+      setMintResult({ 
+        success: true, 
+        hash: receipt.hash, 
+        blockNumber: receipt.blockNumber 
+      });
       saveLastMintTime(walletAddress);
+      setCanMint(false); // Update UI to reflect daily limit used
+
     } catch (err) {
-      console.error(err);
+      console.error("Minting error:", err);
       let errorMessage = "Minting failed";
-      if (err.code === "ACTION_REJECTED") errorMessage = "Transaction rejected";
-      else if (err.message?.includes("insufficient funds")) errorMessage = "Insufficient funds";
+      
+      // Better error detection
+      if (err.code === "ACTION_REJECTED" || err.code === 4001) {
+        errorMessage = "Transaction rejected by user";
+      } else if (err.code === "INSUFFICIENT_FUNDS" || err.message?.includes("insufficient funds")) {
+        errorMessage = "Insufficient funds for transaction";
+      } else if (err.message?.includes("user rejected")) {
+        errorMessage = "Transaction rejected by user";
+      } else if (err.reason) {
+        errorMessage = `Transaction failed: ${err.reason}`;
+      } else if (err.message) {
+        // Provide more detailed error message
+        errorMessage = err.message.length > 100 
+          ? `Error: ${err.message.substring(0, 100)}...` 
+          : `Error: ${err.message}`;
+      }
+      
       setMintResult({ success: false, error: errorMessage });
     } finally {
       setMinting(false);
@@ -201,8 +323,20 @@ export default function MintNFT() {
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         {/* Header */}
         <div className="glass-card-dark p-8 text-center mb-8">
-          <h1 className="text-4xl font-bold gradient-text mb-3">Daily Pack Opening</h1>
+          <div className="flex items-center justify-center space-x-4">
+            <h1 className="text-4xl font-bold gradient-text mb-3">Daily Pack Opening</h1>
+          </div>
           <p className="text-gray-400">Open your daily pack to reveal 5 unique players</p>
+          
+          {/* Daily limit indicator */}
+          {walletAddress && !canMint && (
+            <div className="mt-4 inline-flex items-center space-x-2 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2">
+              <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-yellow-400 font-medium">Daily mint used - Come back tomorrow!</span>
+            </div>
+          )}
         </div>
 
         {!walletAddress && (
@@ -285,7 +419,7 @@ export default function MintNFT() {
                             <div className="text-center mb-3">
                               <div className="w-16 h-16 mx-auto bg-gradient-to-br from-white/10 to-white/5 rounded-full flex items-center justify-center mb-2">
                                 <span className="text-2xl font-bold text-white">
-                                  {player.stats.total} {/* Now shows average */}
+                                  {player.stats.total}
                                 </span>
                               </div>
                               <h3 className="text-sm font-bold text-white mb-1 truncate">{player.name}</h3>
@@ -366,11 +500,25 @@ export default function MintNFT() {
                         Once minted, your card will be added to your collection and listed on the marketplace.
                       </p>
 
+                      {!canMint && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4">
+                          <div className="flex items-start space-x-3">
+                            <svg className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div>
+                              <p className="text-yellow-400 font-medium text-sm">Daily Limit Reached</p>
+                              <p className="text-yellow-300/70 text-xs mt-1">You've already minted today. Come back tomorrow for a new pack!</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <button
                         onClick={mintNFT}
-                        disabled={minting || !selectedPlayer}
+                        disabled={minting || !selectedPlayer || !canMint}
                         className={`w-full py-4 font-semibold text-lg rounded-xl transition-all duration-300 ${
-                          minting || !selectedPlayer
+                          minting || !selectedPlayer || !canMint
                             ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
                             : 'btn-primary'
                         }`}
@@ -379,6 +527,13 @@ export default function MintNFT() {
                           <div className="flex items-center justify-center space-x-3">
                             <div className="spinner"></div>
                             <span>Minting...</span>
+                          </div>
+                        ) : !canMint ? (
+                          <div className="flex items-center justify-center space-x-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            <span>Daily Limit Reached</span>
                           </div>
                         ) : (
                           <div className="flex items-center justify-center space-x-2">
@@ -405,7 +560,10 @@ export default function MintNFT() {
                               </div>
                               <p className="font-semibold text-emerald-400 text-lg">Success!</p>
                             </div>
-                            <p className="text-xs text-gray-500 font-mono break-all">{mintResult.hash}</p>
+                            <p className="text-xs text-gray-500 font-mono break-all mb-2">{mintResult.hash}</p>
+                            {mintResult.warning && (
+                              <p className="text-xs text-yellow-400 mt-2">{mintResult.warning}</p>
+                            )}
                           </div>
                         ) : (
                           <div>
@@ -417,7 +575,7 @@ export default function MintNFT() {
                               </div>
                               <p className="font-semibold text-red-400 text-lg">Failed</p>
                             </div>
-                            <p className="text-red-300">{mintResult.error}</p>
+                            <p className="text-red-300 text-sm">{mintResult.error}</p>
                           </div>
                         )}
                       </div>
